@@ -143,6 +143,61 @@ plt.show()
 
 
 
+param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf']}
+
+grid = GridSearchCV(SVC(class_weight='balanced'), param_grid, refit=True, verbose=0, cv=3)
+grid.fit(X_train_scaled[:5000], y_train[:5000])
+print(f"      Best SVM Params: {grid.best_params_}")
+
+
+best_svm = grid.best_estimator_
+best_svm.fit(X_train_scaled, y_train)
+y_pred_svm = best_svm.predict(X_test_scaled)
+results['SVM'] = y_pred_svm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
