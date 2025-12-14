@@ -46,3 +46,20 @@ if 'duration' in df.columns:
 
 
 
+
+
+# Calculate probabilities of classes
+counts = df['y'].value_counts(normalize=True)
+prob_no = counts['no']
+prob_yes = counts['yes']
+
+#  Majority Class (Always predict 'no')
+baseline_majority = prob_no
+
+#  Random Classifier (p(yes)^2 + p(no)^2)
+baseline_random = (prob_yes ** 2) + (prob_no ** 2)
+
+print(f"Class Distribution: No= {prob_no:.4f}, Yes= {prob_yes:.4f}")
+print(f"Majority Class:   {baseline_majority*100:.2f}%")
+print(f"Random Classifier: {baseline_random*100:.2f}% ")
+
