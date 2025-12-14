@@ -63,3 +63,56 @@ print(f"Class Distribution: No= {prob_no:.4f}, Yes= {prob_yes:.4f}")
 print(f"Majority Class:   {baseline_majority*100:.2f}%")
 print(f"Random Classifier: {baseline_random*100:.2f}% ")
 
+
+
+
+
+
+X_raw = df.drop('y', axis=1)
+y_raw = df['y']
+
+
+le = LabelEncoder()
+y = le.fit_transform(y_raw)
+
+X_encoded = pd.get_dummies(X_raw, drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_encoded, y, test_size=0.3, stratify=y, random_state=42
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
