@@ -142,7 +142,7 @@ plt.show()
 
 
 
-
+# SVM
 param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf']}
 
 grid = GridSearchCV(SVC(class_weight='balanced'), param_grid, refit=True, verbose=0, cv=3)
@@ -156,8 +156,11 @@ y_pred_svm = best_svm.predict(X_test_scaled)
 results['SVM'] = y_pred_svm
 
 
-
-
+# NN
+mlp = MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42, alpha=0.001)
+mlp.fit(X_train_scaled, y_train)
+y_pred_mlp = mlp.predict(X_test_scaled)
+results['Neural Network'] = y_pred_mlp
 
 
 
