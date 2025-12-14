@@ -18,7 +18,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -75,7 +75,7 @@ y = le.fit_transform(y_raw)
 X_encoded = pd.get_dummies(X_raw, drop_first=True)
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X_encoded, y, test_size=0.3, stratify=y, random_state=42)
+    X_encoded, y, test_size=0.25, stratify=y, random_state=42)
 
 
 
@@ -166,6 +166,22 @@ results['Neural Network'] = y_pred_mlp
 
 
 
+
+print(f"{'Model':<20} | {'Accuracy':<10} | {'Precision':<10} | {'Recall':<10} | {'F1-Score':<10}")
+print("-" * 75)
+
+for name, y_pred in results.items():
+    # Calculate all metrics
+    acc = accuracy_score(y_test, y_pred)
+    prec = precision_score(y_test, y_pred, pos_label=1) 
+    rec = recall_score(y_test, y_pred, pos_label=1)     
+    f1 = f1_score(y_test, y_pred, pos_label=1)          
+    
+   
+    print(f"{name:<20} | {acc:.4f}     | {prec:.4f}     | {rec:.4f}     | {f1:.4f}")
+    
+    # Plot Confusion Matrix
+    plot_confusion_matrix(y_test, y_pred, title=f"Confusion Matrix: {name}")
 
 
 
