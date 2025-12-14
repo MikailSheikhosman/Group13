@@ -78,10 +78,14 @@ y = le.fit_transform(y_raw)
 X_encoded = pd.get_dummies(X_raw, drop_first=True)
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X_encoded, y, test_size=0.3, stratify=y, random_state=42
-)
+    X_encoded, y, test_size=0.3, stratify=y, random_state=42)
 
 
+
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
 
 
