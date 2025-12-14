@@ -36,7 +36,7 @@ def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
 # Load with semicolon delimiter as seen in dataset
 df = pd.read_csv('bank-full.csv', sep=';')
 
-# Drop 'duration' column (Data Leakage) The duration is not known before a call is performed.
+
 if 'duration' in df.columns:
     df = df.drop('duration', axis=1)
 
@@ -88,7 +88,7 @@ X_test_scaled = scaler.transform(X_test)
 
 
 
-# Project to 2D to visualize separability
+# PCA
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_train_scaled)
 
@@ -99,6 +99,75 @@ plt.title('PCA Projection (2 Components)')
 plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
 plt.show()
+
+
+
+
+
+
+results = {}
+
+# Decision Tree 
+dt = DecisionTreeClassifier(random_state=42, class_weight='balanced', max_depth=10)
+dt.fit(X_train, y_train)
+y_pred_dt = dt.predict(X_test)
+results['Decision Tree'] = y_pred_dt
+
+# Decision Tree Feature Importance Plot
+importances_dt = dt.feature_importances_
+indices_dt = np.argsort(importances_dt)[::-1][:10]
+plt.figure(figsize=(10, 5))
+plt.title("Top 10 Feature Importances (Decision Tree)")
+plt.bar(range(10), importances_dt[indices_dt], align="center", color='salmon')
+plt.xticks(range(10), X_encoded.columns[indices_dt], rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Random Forest
+rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=15)
+rf.fit(X_train, y_train)
+y_pred_rf = rf.predict(X_test)
+results['Random Forest'] = y_pred_rf
+
+# Random Forest Feature Importance Plot
+importances_rf = rf.feature_importances_
+indices_rf = np.argsort(importances_rf)[::-1][:10]
+plt.figure(figsize=(10, 5))
+plt.title("Top 10 Feature Importances (Random Forest)")
+plt.bar(range(10), importances_rf[indices_rf], align="center", color='skyblue')
+plt.xticks(range(10), X_encoded.columns[indices_rf], rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
