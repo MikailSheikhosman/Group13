@@ -23,10 +23,7 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 plt.style.use('seaborn-v0_8-whitegrid')
 
 def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
-    """
-    Helper function to plot a confusion matrix.
-    Recommended by marker feedback.
-    """
+    
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(5, 4))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
@@ -91,7 +88,17 @@ X_test_scaled = scaler.transform(X_test)
 
 
 
+# Project to 2D to visualize separability
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_train_scaled)
 
+plt.figure(figsize=(8, 6))
+scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y_train, cmap='coolwarm', alpha=0.6, s=10)
+plt.colorbar(scatter, label='Term Deposit (0=No, 1=Yes)')
+plt.title('PCA Projection (2 Components)')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.show()
 
 
 
