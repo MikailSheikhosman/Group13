@@ -149,18 +149,35 @@ plt.tight_layout()
 plt.show()
 
 
-
-# Get top feature names
+# lean forest
 top_features = X_encoded.columns[indices]
 print(f"     Selected Features: {list(top_features)}")
 
-# Filter data to keep ONLY those columns
 X_train_lean = X_train[top_features]
 X_test_lean = X_test[top_features]
 rf_lean = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=15)
 rf_lean.fit(X_train_lean, y_train)
 results['RF (Top 10 Features)'] = rf_lean.predict(X_test_lean)
 
+
+#tuned forest
+rf_params = {
+    'n_estimators': [50, 100, 150, 200, 250, 300], 
+    'max_depth': [5, 10, 15, 20, 25],
+    'min_samples_split': [2, 5],     
+    'max_features': ['sqrt', 'log2'] 
+}
+
+# Run GridSearch
+rf_grid = GridSearchCV(RandomForestClassifier(class_weight='balanced', random_state=42), 
+                       rf_params, cv=3, scoring='f1', n_jobs=1)
+rf_grid.fit(X_train[:5000], y_train[:5000])
+
+print(f"     Best RF Params: {rf_grid.best_params_}")
+
+best_rf = rf_grid.best_estimator_
+best_rf.fit(X_train, y_train)
+results['RF (Tuned)'] = best_rf.predict(X_test)
 
 
 
@@ -198,14 +215,27 @@ results['k-NN'] = y_pred_knn
 
 # SVM
 #optimisation
-param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf']}
-grid = GridSearchCV(SVC(class_weight='balanced'), param_grid, refit=True, verbose=0, cv=3)
+param_grid = {
+    'C': [0.1, 1, 3, 5, 8, 10], 
+    'gamma': ['scale', 'auto'], 
+    'kernel': ['rbf', 'poly']
+}
+
+
+# n_jobs=1 prevents the ChildProcessError
+grid = GridSearchCV(SVC(class_weight='balanced', random_state=42), 
+                    param_grid, refit=True, verbose=0, cv=3, n_jobs=1)
+
+
 grid.fit(X_train_scaled[:5000], y_train[:5000])
-print(f"      Best SVM Params: {grid.best_params_}")
+
+print(f"     Best SVM Params: {grid.best_params_}")
 
 
 best_svm = grid.best_estimator_
 best_svm.fit(X_train_scaled, y_train)
+
+
 y_pred_svm = best_svm.predict(X_test_scaled)
 results['SVM'] = y_pred_svm
 
@@ -218,7 +248,7 @@ results['Neural Network'] = y_pred_mlp
 
 
 
-
+print("RESULTS TABLE")
 
 
 print(f"{'Model':<20} | {'Accuracy':<10} | {'Precision':<10} | {'Recall':<10} | {'F1-Score':<10}")
