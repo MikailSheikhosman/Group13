@@ -18,6 +18,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import Perceptron
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
 
 plt.style.use('seaborn-v0_8-whitegrid')
@@ -75,7 +78,7 @@ y = le.fit_transform(y_raw)
 X_encoded = pd.get_dummies(X_raw, drop_first=True)
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X_encoded, y, test_size=0.25, stratify=y, random_state=42)
+    X_encoded, y, test_size=0.3, stratify=y, random_state=42)
 
 
 
@@ -123,28 +126,79 @@ plt.xticks(range(10), X_encoded.columns[indices_dt], rotation=45)
 plt.tight_layout()
 plt.show()
 
-# Random Forest
+
+
+
+
+# Forest
 rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=15)
 rf.fit(X_train, y_train)
 y_pred_rf = rf.predict(X_test)
 results['Random Forest'] = y_pred_rf
 
-# Random Forest Feature Importance Plot
-importances_rf = rf.feature_importances_
-indices_rf = np.argsort(importances_rf)[::-1][:10]
+
+importances = rf.feature_importances_
+indices = np.argsort(importances)[::-1][:10]
+
+# Plot Feature Importance
 plt.figure(figsize=(10, 5))
 plt.title("Top 10 Feature Importances (Random Forest)")
-plt.bar(range(10), importances_rf[indices_rf], align="center", color='skyblue')
-plt.xticks(range(10), X_encoded.columns[indices_rf], rotation=45)
+plt.bar(range(10), importances[indices], align="center", color='skyblue')
+plt.xticks(range(10), X_encoded.columns[indices], rotation=45)
 plt.tight_layout()
 plt.show()
 
 
 
+# Get top feature names
+top_features = X_encoded.columns[indices]
+print(f"     Selected Features: {list(top_features)}")
+
+# Filter data to keep ONLY those columns
+X_train_lean = X_train[top_features]
+X_test_lean = X_test[top_features]
+rf_lean = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=15)
+rf_lean.fit(X_train_lean, y_train)
+results['RF (Top 10 Features)'] = rf_lean.predict(X_test_lean)
+
+
+
+
+
+
+# Naive bayes
+nb = GaussianNB()
+nb.fit(X_train_scaled, y_train)
+y_pred_nb = nb.predict(X_test_scaled)
+results['Naive Bayes'] = y_pred_nb
+
+
+
+
+
+# Perceptron 
+ppn = Perceptron(max_iter=1000, eta0=0.1, random_state=42)
+ppn.fit(X_train_scaled, y_train)
+y_pred_ppn = ppn.predict(X_test_scaled)
+results['Perceptron'] = y_pred_ppn
+
+
+
+# k-Nearest Neighbors
+knn = KNeighborsClassifier(n_neighbors=5)
+knn.fit(X_train_scaled, y_train)
+y_pred_knn = knn.predict(X_test_scaled)
+results['k-NN'] = y_pred_knn
+
+
+
+
+
+
 
 # SVM
+#optimisation
 param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf']}
-
 grid = GridSearchCV(SVC(class_weight='balanced'), param_grid, refit=True, verbose=0, cv=3)
 grid.fit(X_train_scaled[:5000], y_train[:5000])
 print(f"      Best SVM Params: {grid.best_params_}")
