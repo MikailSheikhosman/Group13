@@ -19,6 +19,7 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import Perceptron
+from imblearn.over_sampling import SMOTE
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
 
@@ -239,18 +240,46 @@ y_pred_svm = best_svm.predict(X_test_scaled)
 results['SVM'] = y_pred_svm
 
 
-# NN
-mlp = MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42, alpha=0.001)
-mlp.fit(X_train_scaled, y_train)
-y_pred_mlp = mlp.predict(X_test_scaled)
-results['Neural Network'] = y_pred_mlp
+# NN 
+
+# SMOTE used
+
+sm = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = sm.fit_resample(X_train_scaled, y_train)
+
+
+mlp_params = {
+    'hidden_layer_sizes': [(50, 50), (100,), (100, 50)], 
+    'activation': ['relu', 'tanh'],
+    'alpha': [0.0001, 0.001, 0.01],  
+    'learning_rate_init': [0.001, 0.01]
+}
+
+
+mlp_grid = GridSearchCV(
+    MLPClassifier(max_iter=1000, random_state=42, early_stopping=True),
+    mlp_params, 
+    cv=3, 
+    scoring='f1', 
+    n_jobs=-1
+)
+
+mlp_grid.fit(X_train_resampled, y_train_resampled)
+
+
+best_mlp = mlp_grid.best_estimator_
+y_pred_mlp_opt = best_mlp.predict(X_test_scaled)
+results['Neural Network '] = y_pred_mlp_opt
+
 
 plt.figure(figsize=(6, 4))
-plt.plot(mlp.loss_curve_)
-plt.title("Neural Network Loss Curve")
+plt.plot(best_mlp.loss_curve_)
+plt.title("Optimized Neural Network Loss Curve")
 plt.xlabel("Iterations")
 plt.ylabel("Loss")
 plt.show()
+
+
 
 
 
