@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.decomposition import PCA
@@ -245,6 +244,13 @@ mlp = MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=1000, random_state=42,
 mlp.fit(X_train_scaled, y_train)
 y_pred_mlp = mlp.predict(X_test_scaled)
 results['Neural Network'] = y_pred_mlp
+
+plt.figure(figsize=(6, 4))
+plt.plot(mlp.loss_curve_)
+plt.title("Neural Network Loss Curve")
+plt.xlabel("Iterations")
+plt.ylabel("Loss")
+plt.show()
 
 
 
