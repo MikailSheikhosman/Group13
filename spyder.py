@@ -16,7 +16,6 @@ from sklearn.decomposition import PCA
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import Perceptron
 from sklearn.linear_model import LogisticRegression
@@ -24,6 +23,12 @@ from imblearn.over_sampling import SMOTE
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, silhouette_score
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, confusion_matrix
+import gc
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -454,44 +459,158 @@ results['SVM'] = y_pred_svm
 
 # NN 
 
-# SMOTE used
+#neural network
+np.random.seed(42)
+tf.random.set_seed(42)
 
-sm = SMOTE(random_state=42)
-X_train_resampled, y_train_resampled = sm.fit_resample(X_train_scaled, y_train)
-
-
-mlp_params = {
-    'hidden_layer_sizes': [(50, 50), (100,), (100, 50)], 
-    'activation': ['relu', 'tanh'],
-    'alpha': [0.0001, 0.001, 0.01],  
-    'learning_rate_init': [0.001, 0.01]
-}
-
-
-mlp_grid = GridSearchCV(
-    MLPClassifier(max_iter=1000, random_state=42, early_stopping=True),
-    mlp_params, 
-    cv=3, 
-    scoring='f1', 
-    n_jobs=-1
+#  Train/Validation split
+X_train_nn, X_val_nn, y_train_nn, y_val_nn = train_test_split(
+    X_train_scaled, y_train,
+    test_size=0.2,
+    random_state=42,
+    stratify=y_train
 )
 
-mlp_grid.fit(X_train_resampled, y_train_resampled)
+# One-hot targets for softmax ,categorical_crossentropy 
+y_train_oh = keras.utils.to_categorical(y_train_nn, num_classes=2)
+y_val_oh   = keras.utils.to_categorical(y_val_nn,   num_classes=2)
 
+def build_mlp(input_dim, units=(128, 64), activation="relu",
+              dropout_rate=0.2, l2_strength=0.0):
+    reg = regularizers.l2(l2_strength) if l2_strength > 0 else None
 
-best_mlp = mlp_grid.best_estimator_
-y_pred_mlp_opt = best_mlp.predict(X_test_scaled)
-results['Neural Network '] = y_pred_mlp_opt
+    model = keras.Sequential()
+    model.add(layers.Input(shape=(input_dim,)))
 
+    for u in units:
+        model.add(layers.Dense(u, activation=activation, kernel_regularizer=reg))
+        if dropout_rate and dropout_rate > 0:
+            model.add(layers.Dropout(dropout_rate))
 
-plt.figure(figsize=(6, 4))
-plt.plot(best_mlp.loss_curve_)
-plt.title("Optimized Neural Network Loss Curve")
-plt.xlabel("Iterations")
-plt.ylabel("Loss")
-plt.show()
+    model.add(layers.Dense(2, activation="softmax"))
+    return model
 
+def make_optimizer(opt_name, lr, momentum=0.9):
+    if opt_name == "adam":
+        return keras.optimizers.Adam(learning_rate=lr)
+    elif opt_name == "sgd":
+        return keras.optimizers.SGD(learning_rate=lr, momentum=momentum)
+    else:
+        raise ValueError("opt_name must be 'adam' or 'sgd'")
 
+def make_early_stop(patience=8, min_delta=1e-3):
+    return keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        min_delta=min_delta,
+        patience=patience,
+        restore_best_weights=True
+    )
+
+def best_threshold_for_f1(y_true, p_yes):
+    # threshold search to maximise F1 on validation
+    best_t, best_f1 = 0.5, -1
+    for t in np.linspace(0.05, 0.95, 19): 
+        y_pred = (p_yes >= t).astype(int)
+        f1 = f1_score(y_true, y_pred, pos_label=1, zero_division=0)
+        if f1 > best_f1:
+            best_f1, best_t = f1, t
+    return best_t, best_f1
+
+# 3) Small search space 
+search_space = [
+    # Architecture/regularisation knobs (dropout/L2) + optimiser knobs (Adam/SGD+momentum)
+    {"units": (128, 64), "activation": "relu", "dropout": 0.1, "l2": 0.0,   "opt": "adam", "lr": 1e-3,  "batch": 128},
+    {"units": (128, 64), "activation": "relu", "dropout": 0.2, "l2": 0.0,   "opt": "adam", "lr": 5e-4,  "batch": 128},
+    {"units": (128, 64), "activation": "relu", "dropout": 0.2, "l2": 1e-4,  "opt": "adam", "lr": 5e-4,  "batch": 128},
+
+    {"units": (128, 64), "activation": "tanh", "dropout": 0.1, "l2": 0.0,   "opt": "adam", "lr": 5e-4,  "batch": 128},
+    {"units": (128, 64), "activation": "tanh", "dropout": 0.2, "l2": 1e-4,  "opt": "adam", "lr": 5e-4,  "batch": 128},
+
+    {"units": (128, 64), "activation": "relu", "dropout": 0.2, "l2": 0.0,   "opt": "sgd",  "lr": 1e-2,  "momentum": 0.9, "batch": 128},
+    {"units": (128, 64), "activation": "relu", "dropout": 0.1, "l2": 0.0,   "opt": "sgd",  "lr": 1e-2,  "momentum": 0.9, "batch": 128},
+    {"units": (128, 64), "activation": "relu", "dropout": 0.2, "l2": 1e-4,  "opt": "sgd",  "lr": 1e-2,  "momentum": 0.9, "batch": 128},
+
+    # slightly smaller model. sometimes generalises better
+    {"units": (64, 64),  "activation": "relu", "dropout": 0.1, "l2": 0.0,   "opt": "adam", "lr": 5e-4,  "batch": 128},
+    {"units": (64, 64),  "activation": "relu", "dropout": 0.2, "l2": 1e-4,  "opt": "sgd",  "lr": 1e-2,  "momentum": 0.9, "batch": 128},
+]
+
+early_stop = make_early_stop(patience=8, min_delta=1e-3)
+
+print("\nNEURAL NETWORK (lecture-style tuning + threshold tuning)")
+print(f"Total configs to try: {len(search_space)}\n")
+
+best = {"val_f1": -1, "cfg": None, "model": None, "threshold": 0.5}
+
+for i, cfg in enumerate(search_space, start=1):
+    keras.backend.clear_session()
+    gc.collect()
+
+    model = build_mlp(
+        input_dim=X_train_nn.shape[1],
+        units=cfg["units"],
+        activation=cfg["activation"],
+        dropout_rate=cfg["dropout"],
+        l2_strength=cfg["l2"]
+    )
+
+    opt = make_optimizer(
+        opt_name=cfg["opt"],
+        lr=cfg["lr"],
+        momentum=cfg.get("momentum", 0.9)
+    )
+
+    model.compile(optimizer=opt, loss="categorical_crossentropy", metrics=["accuracy"])
+
+    model.fit(
+        X_train_nn, y_train_oh,
+        validation_data=(X_val_nn, y_val_oh),
+        epochs=120,                # early stopping
+        batch_size=cfg["batch"],
+        verbose=0,
+        callbacks=[early_stop]
+    )
+
+    # validation . tune threshold for best F1 
+    val_probs = model.predict(X_val_nn, verbose=0)
+    p_yes = val_probs[:, 1]
+    t_best, f1_best = best_threshold_for_f1(y_val_nn, p_yes)
+
+    # also report the default argmax metrics 
+    val_pred_default = np.argmax(val_probs, axis=1)
+    val_f1_default = f1_score(y_val_nn, val_pred_default, pos_label=1, zero_division=0)
+
+    print(f"[{i:02d}/{len(search_space)}] {cfg} -> "
+          f"Val F1 (default argmax)={val_f1_default:.4f} | "
+          f"Val F1 (best threshold {t_best:.2f})={f1_best:.4f}")
+
+    if f1_best > best["val_f1"]:
+        best.update({"val_f1": f1_best, "cfg": cfg, "model": model, "threshold": t_best})
+
+print("\nBEST CONFIG (by validation F1 with tuned threshold):")
+print(best["cfg"])
+print(f"Best validation F1: {best['val_f1']:.4f} at threshold={best['threshold']:.2f}")
+
+#  Final test evaluation using tuned threshold 
+best_model = best["model"]
+test_probs = best_model.predict(X_test_scaled, verbose=0)
+p_yes_test = test_probs[:, 1]
+test_pred = (p_yes_test >= best["threshold"]).astype(int)
+results["Neural Network (tuned threshold)"] = test_pred
+
+test_acc  = accuracy_score(y_test, test_pred)
+test_prec = precision_score(y_test, test_pred, pos_label=1, zero_division=0)
+test_rec  = recall_score(y_test, test_pred, pos_label=1, zero_division=0)
+test_f1   = f1_score(y_test, test_pred, pos_label=1, zero_division=0)
+cm        = confusion_matrix(y_test, test_pred)
+
+print("\nKeras NN Test Metrics (best run, tuned threshold):")
+print(f"Accuracy:  {test_acc:.4f}")
+print(f"Precision: {test_prec:.4f}")
+print(f"Recall:    {test_rec:.4f}")
+print(f"F1:        {test_f1:.4f}")
+print("\nConfusion Matrix (rows=true, cols=pred):")
+print(cm)
 
 
 
