@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
+from sklearn.model_selection import train_test_split, GridSearchCV, validation_curve
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.tree import DecisionTreeClassifier
@@ -21,7 +21,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import Perceptron
 from imblearn.over_sampling import SMOTE
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score, precision_score, recall_score
+from sklearn.cluster import KMeans
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, silhouette_score
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -35,6 +36,32 @@ def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
     plt.title(title)
     plt.show()
 
+def plot_complexity_curve(estimator, title, X, y, param_name, param_range, cv=3, scoring="f1"):
+    train_scores, test_scores = validation_curve(
+        estimator, X, y, param_name=param_name, param_range=param_range,
+        cv=cv, scoring=scoring, n_jobs=1
+    )
+
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+
+    plt.figure(figsize=(8, 5))
+    plt.title(title)
+    plt.xlabel(param_name)
+    plt.ylabel(f"Score ({scoring})")
+    plt.ylim(0.0, 1.1)
+    
+    plt.plot(param_range, train_mean, label="Training Score", color="darkorange", marker='o')
+    plt.fill_between(param_range, train_mean - train_std, train_mean + train_std, alpha=0.2, color="darkorange")
+    
+    plt.plot(param_range, test_mean, label="Cross-Validation Score", color="navy", marker='o')
+    plt.fill_between(param_range, test_mean - test_std, test_mean + test_std, alpha=0.2, color="navy")
+    
+    plt.legend(loc="best")
+    plt.grid(True)
+    plt.show()
 
 # Load with semicolon delimiter as seen in dataset
 df = pd.read_csv('bank-full.csv', sep=';')
@@ -103,15 +130,55 @@ plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
 plt.show()
 
-
-
-
-
-
 results = {}
 
+# Silhouette Scores to find optimal k
+silhouette_scores = []
+k_range = range(2, 11)
+
+for k in k_range:
+    kmeans_temp = KMeans(n_clusters=k, random_state=42, n_init=10)
+    cluster_labels = kmeans_temp.fit_predict(X_train_scaled)
+    score = silhouette_score(X_train_scaled, cluster_labels)
+    silhouette_scores.append(score)
+
+# Plot Silhouette Scores
+plt.figure(figsize=(8, 5))
+plt.plot(k_range, silhouette_scores, marker='o', linestyle='-', color='green')
+plt.title('Silhouette Scores for Optimal k')
+plt.xlabel('Number of Clusters')
+plt.ylabel('Silhouette Score (Higher is Better)')
+plt.grid(True)
+plt.show()
+
+best_index = np.argmax(silhouette_scores)
+optimal_k = k_range[best_index]
+
+print(f"Optimal k based on Silhouette Score: {optimal_k}")
+
+kmeans_final = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+kmeans_final.fit(X_train_scaled)
+
+train_cluster_ids = kmeans_final.predict(X_train_scaled)
+cluster_map = {}
+
+for cluster_id in range(optimal_k):
+    indices = np.where(train_cluster_ids == cluster_id)
+    true_labels_in_cluster = y_train[indices]
+    
+    if len(true_labels_in_cluster) > 0:
+        mode_label = np.bincount(true_labels_in_cluster).argmax()
+    else:
+        mode_label = 0
+    
+    cluster_map[cluster_id] = mode_label
+
+test_cluster_ids = kmeans_final.predict(X_test_scaled)
+y_pred_kmeans = np.array([cluster_map[cid] for cid in test_cluster_ids])
+results[f'KMeans (k={optimal_k})'] = y_pred_kmeans
+
 # Decision Tree 
-dt = DecisionTreeClassifier(random_state=42, class_weight='balanced', max_depth=10)
+dt = DecisionTreeClassifier(random_state=42, class_weight='balanced', max_depth=7)
 dt.fit(X_train, y_train)
 y_pred_dt = dt.predict(X_test)
 results['Decision Tree'] = y_pred_dt
@@ -289,13 +356,19 @@ print("RESULTS TABLE")
 print(f"{'Model':<20} | {'Accuracy':<10} | {'Precision':<10} | {'Recall':<10} | {'F1-Score':<10}")
 print("-" * 75)
 
+final_f1_scores = []
+final_model_names = []
+
 for name, y_pred in results.items():
     # Calculate all metrics
     acc = accuracy_score(y_test, y_pred)
-    prec = precision_score(y_test, y_pred, pos_label=1) 
-    rec = recall_score(y_test, y_pred, pos_label=1)     
-    f1 = f1_score(y_test, y_pred, pos_label=1)          
-    
+    prec = precision_score(y_test, y_pred, pos_label=1, zero_division=0) 
+    rec = recall_score(y_test, y_pred, pos_label=1, zero_division=0)     
+    f1 = f1_score(y_test, y_pred, pos_label=1, zero_division=0)    
+          
+    if 'KMeans' not in name:
+        final_f1_scores.append(f1)
+        final_model_names.append(name)
    
     print(f"{name:<20} | {acc:.4f}     | {prec:.4f}     | {rec:.4f}     | {f1:.4f}")
     
@@ -303,10 +376,14 @@ for name, y_pred in results.items():
     plot_confusion_matrix(y_test, y_pred, title=f"Confusion Matrix: {name}")
 
 
-
-
-
-
+plt.figure(figsize=(12, 6))
+sns.barplot(x=final_f1_scores, y=final_model_names, palette='magma')
+plt.title('Model Performance Comparison (F1-Score)')
+plt.xlabel('F1 Score')
+plt.xlim(0, 1.0)
+plt.grid(axis='x', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
 
 
 
