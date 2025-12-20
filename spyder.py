@@ -19,6 +19,7 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import Perceptron
+from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import SMOTE
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
@@ -397,8 +398,11 @@ nb.fit(X_train_scaled, y_train)
 y_pred_nb = nb.predict(X_test_scaled)
 results['Naive Bayes'] = y_pred_nb
 
-
-
+# Logistic Regression
+log_reg = LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42)
+log_reg.fit(X_train_scaled, y_train)
+y_pred_lr = log_reg.predict(X_test_scaled)
+results['Logistic Regression'] = y_pred_lr
 
 
 # Perceptron 
