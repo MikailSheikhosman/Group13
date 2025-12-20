@@ -63,6 +63,9 @@ def plot_complexity_curve(estimator, title, X, y, param_name, param_range, cv=3,
     plt.grid(True)
     plt.show()
 
+
+
+
 # Load with semicolon delimiter as seen in dataset
 df = pd.read_csv('bank-full.csv', sep=';')
 
@@ -70,6 +73,144 @@ df = pd.read_csv('bank-full.csv', sep=';')
 if 'duration' in df.columns:
     df = df.drop('duration', axis=1)
 
+
+y_for_interpret = df["y"]
+X_for_clustering = df.drop(columns=["y"])
+
+
+#KMEANS PCA
+# turned categorical columns into numeric features 
+#  preprocessing so can apply to the dataset.
+X_numeric = pd.get_dummies(X_for_clustering, drop_first=True)
+
+# scaled features 
+scaler_k = StandardScaler()
+X_scaled = scaler_k.fit_transform(X_numeric)
+
+
+# pca so representation , visualisation , decide components using variance explained
+pca_full = PCA(random_state=42)
+X_pca_full = pca_full.fit_transform(X_scaled)
+
+# plott cumulative proportion of variance explained
+cum_pve = np.cumsum(pca_full.explained_variance_ratio_)
+plt.figure(figsize=(7, 4))
+plt.plot(range(1, len(cum_pve) + 1), cum_pve, marker="o", markersize=3)
+plt.xlabel("Number of PCA components")
+plt.ylabel("Cumulative proportion of variance explained")
+plt.title("PCA: cumulative variance explained ")
+plt.tight_layout()
+plt.show()
+
+# Picked a number of components for clustering 
+# tweked was 15 ,25 now 30
+pca_dims_for_kmeans = 30
+pca_for_kmeans = PCA(n_components=pca_dims_for_kmeans, random_state=42)
+X_pca_for_kmeans = pca_for_kmeans.fit_transform(X_scaled)
+
+# 2d pca for plotting clusters
+pca_2d = PCA(n_components=2, random_state=42)
+X_pca_2d = pca_2d.fit_transform(X_scaled)
+
+plt.figure(figsize=(8, 6))
+plt.scatter(X_pca_2d[:, 0], X_pca_2d[:, 1], s=8, alpha=0.35)
+plt.title("PCA (2D) projection before clustering")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.tight_layout()
+plt.show()
+
+
+# K-MEANS 
+k_list = [2, 3, 4, 5, 6] 
+chosen_k = 4
+
+print("\n K MEANS  RESULTS ")
+print(f"PCA dimensions used for k means: {pca_dims_for_kmeans}")
+print("Trying different k values (…\n")
+
+for k in k_list:
+    km = KMeans(n_clusters=k, random_state=42, n_init=50, max_iter=500)
+    cluster_ids = km.fit_predict(X_pca_for_kmeans)
+
+    centroids = km.cluster_centers_
+    sse = float(np.sum((X_pca_for_kmeans - centroids[cluster_ids]) ** 2))
+
+    # Show clusters on PCA 2D projection 
+    plt.figure(figsize=(8, 6))
+    plt.scatter(X_pca_2d[:, 0], X_pca_2d[:, 1], c=cluster_ids, s=8, alpha=0.5)
+    plt.title(f"K-means clusters on PCA(2D) plot (k={k})")
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.colorbar(label="Cluster")
+    plt.tight_layout()
+    plt.show()
+
+    # Interpretation only,  y is used after clustering
+    cluster_summary = (
+        pd.DataFrame({"cluster": cluster_ids, "y": y_for_interpret})
+        .groupby("cluster")
+        .agg(
+            n=("cluster", "size"),
+            yes_rate=("y", lambda s: (s == "yes").mean())
+        )
+        .sort_values("yes_rate", ascending=False)
+    )
+
+    print(f"k = {k}")
+    print(f"Within cluster SSE : {sse:.2f}")
+    print("Cluster sizes + yes_rate (interpretation only):")
+    print(cluster_summary)
+   
+    
+    if k == chosen_k:
+        #  cluster profiling for the chosen solution (k=4) 
+        df_profile = df.copy()
+        df_profile["cluster"] = cluster_ids
+
+        # Numeric averages by cluster
+        num_cols = df_profile.select_dtypes(include=[np.number]).columns
+        
+        print(f"\n numeric means by cluster (k={chosen_k}):")
+        
+        print(df_profile.groupby("cluster")[num_cols].mean(numeric_only=True))
+
+        # Most common categories by cluster (mode)
+        cat_cols = df_profile.select_dtypes(exclude=[np.number]).columns
+        cat_cols = [c for c in cat_cols if c not in ["y"]]
+        print(f"\n most common categories by cluster (k={chosen_k}):")
+        print(df_profile.groupby("cluster")[cat_cols].agg(lambda s: s.mode().iloc[0]))
+
+        # Yes rate by cluster
+        print(f"\nyes rate by cluster (k={chosen_k}):")
+
+        print(df_profile.groupby("cluster")["y"]
+              .apply(lambda s: (s == "yes").mean())
+              .sort_values(ascending=False))
+
+num_cols = [c for c in df_profile.select_dtypes(include=[np.number]).columns if c != "cluster"]
+print(df_profile.groupby("cluster")[num_cols].mean(numeric_only=True))
+
+
+# Stability
+
+
+print("stability check")
+print(f"Chosen k for stability check: {chosen_k}")
+
+stability_rows = []
+for seed in [1, 2, 3, 4, 5]:
+    km_s = KMeans(n_clusters=chosen_k, random_state=seed, n_init=50, max_iter=500)
+
+    labels_s = km_s.fit_predict(X_pca_for_kmeans)
+    cents_s = km_s.cluster_centers_
+    sse_s = float(np.sum((X_pca_for_kmeans - cents_s[labels_s]) ** 2))
+
+    sizes = pd.Series(labels_s).value_counts().sort_index().to_dict()
+    stability_rows.append({"seed": seed, "within_sse": sse_s, "cluster_sizes": sizes})
+
+stability_df = pd.DataFrame(stability_rows)
+print(stability_df.to_string(index=False))
 
 
 
