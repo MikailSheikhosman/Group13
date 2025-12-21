@@ -4,6 +4,15 @@
 Created on Sat Nov  1 22:38:42 2025
 
 @author: apps
+
+Script Description:
+This script performs a comprehensive analysis of the Bank Marketing dataset.
+It includes:
+1. Data Cleaning & Preprocessing (Handling missing values, Encoding, Scaling).
+2. Unsupervised Learning (PCA & K-Means Clustering) to find natural patterns.
+3. Supervised Learning (Training multiple models: DT, RF, SVM, NN, etc.).
+4. Hyperparameter Tuning (GridSearch for RF/SVM, Custom loop for NN).
+5. Evaluation (Confusion Matrices, F1 Scores, Complexity Curves).
 """
 import tensorflow as tf
 from tensorflow import keras
@@ -45,9 +54,12 @@ def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
     plt.title(title)
     plt.show()
 
-# Function to draw the "Complexity Curve".
-# This graph shows if a model is "learning" or "memorizing".
 def plot_complexity_curve(estimator, title, X, y, param_name, param_range, cv=3, scoring="f1"):
+    """
+    Plots Training vs Validation scores across a parameter range.
+    - Large gap between lines = Overfitting (High Variance).
+    - Both lines low = Underfitting (High Bias).
+    """
     train_scores, test_scores = validation_curve(
         estimator, X, y, param_name=param_name, param_range=param_range,
         cv=cv, scoring=scoring, n_jobs=1
@@ -84,7 +96,7 @@ df = pd.read_csv('bank-full.csv', sep=';')
 if 'duration' in df.columns:
     df = df.drop('duration', axis=1)
 
-
+# Separate Target for Analysis before encoding
 y_for_interpret = df["y"]
 X_for_clustering = df.drop(columns=["y"])
 
@@ -109,18 +121,20 @@ print(f"Random Classifier: {baseline_random*100:.2f}% ")
 X_raw = df.drop('y', axis=1)
 y_raw = df['y']
 
-
+# Encode Target (yes/no -> 1/0)
 le = LabelEncoder()
 y = le.fit_transform(y_raw)
 
+# Encode Features (One-Hot Encoding for categorical vars)
 X_encoded = pd.get_dummies(X_raw, drop_first=True)
 
+# Train/Test Split
 X_train, X_test, y_train, y_test = train_test_split(
     X_encoded, y, test_size=0.3, stratify=y, random_state=42)
 
 
 
-
+# Feature Scaling (Standardization)
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
@@ -245,7 +259,7 @@ print(df_profile.groupby("cluster")[num_cols].mean(numeric_only=True))
 
 print("stability check")
 print(f"Chosen k for stability check: {chosen_k}")
-
+# Run K-Means multiple times with different seeds to ensure clusters are robust
 stability_rows = []
 for seed in [1, 2, 3, 4, 5]:
     km_s = KMeans(n_clusters=chosen_k, random_state=seed, n_init=50, max_iter=500)
@@ -288,10 +302,13 @@ results = {}
 
 
 # Decision Tree 
+# Using class_weight='balanced' to handle imbalanced dataset
 dt = DecisionTreeClassifier(random_state=42, class_weight='balanced', max_depth=7)
 dt.fit(X_train, y_train)
 y_pred_dt = dt.predict(X_test)
 results['Decision Tree'] = y_pred_dt
+
+# Check for Overfitting using Complexity Curve
 plot_complexity_curve(
     DecisionTreeClassifier(class_weight='balanced', random_state=42),
     "Decision Tree Complexity Curve (Overfitting Check)",
@@ -316,7 +333,7 @@ plt.show()
 
 
 
-# Forest
+# Random Forest
 rf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', max_depth=15)
 rf.fit(X_train, y_train)
 y_pred_rf = rf.predict(X_test)
@@ -340,7 +357,7 @@ plt.ylabel("Importance Score (Gini)")
 plt.tight_layout()
 plt.show()
 
-# lean forest (top 10 features)
+# lean forest (retraining using only the Top 10 features)
 top_features = X_encoded.columns[indices]
 print(f"     Selected Features: {list(top_features)}")
 
@@ -360,6 +377,7 @@ rf_params = {
 }
 
 # Run GridSearch
+# n_jobs=1 ensures compatibility across environments
 rf_grid = GridSearchCV(RandomForestClassifier(class_weight='balanced', random_state=42), 
                        rf_params, cv=3, scoring='f1', n_jobs=1)
 rf_grid.fit(X_train[:5000], y_train[:5000])
@@ -454,6 +472,7 @@ X_train_nn, X_val_nn, y_train_nn, y_val_nn = train_test_split(
 y_train_oh = keras.utils.to_categorical(y_train_nn, num_classes=2)
 y_val_oh   = keras.utils.to_categorical(y_val_nn,   num_classes=2)
 
+# Function to build dynamic MLP architecture
 def build_mlp(input_dim, units=(128, 64), activation="relu",
               dropout_rate=0.2, l2_strength=0.0):
     reg = regularizers.l2(l2_strength) if l2_strength > 0 else None
@@ -464,11 +483,12 @@ def build_mlp(input_dim, units=(128, 64), activation="relu",
     for u in units:
         model.add(layers.Dense(u, activation=activation, kernel_regularizer=reg))
         if dropout_rate and dropout_rate > 0:
-            model.add(layers.Dropout(dropout_rate))
+            model.add(layers.Dropout(dropout_rate)) # Regularization to prevent overfitting
 
-    model.add(layers.Dense(2, activation="softmax"))
+    model.add(layers.Dense(2, activation="softmax")) # Output layer for binary class
     return model
 
+# Optimizers factory
 def make_optimizer(opt_name, lr, momentum=0.9):
     if opt_name == "adam":
         return keras.optimizers.Adam(learning_rate=lr)
@@ -477,6 +497,7 @@ def make_optimizer(opt_name, lr, momentum=0.9):
     else:
         raise ValueError("opt_name must be 'adam' or 'sgd'")
 
+# Early Stopping callback to prevent overfitting
 def make_early_stop(patience=8, min_delta=1e-3):
     return keras.callbacks.EarlyStopping(
         monitor="val_loss",
@@ -485,8 +506,8 @@ def make_early_stop(patience=8, min_delta=1e-3):
         restore_best_weights=True
     )
 
+# Find optimal probability cutoff for F1
 def best_threshold_for_f1(y_true, p_yes):
-    # threshold search to maximise F1 on validation
     best_t, best_f1 = 0.5, -1
     for t in np.linspace(0.05, 0.95, 19): 
         y_pred = (p_yes >= t).astype(int)
@@ -495,6 +516,7 @@ def best_threshold_for_f1(y_true, p_yes):
             best_f1, best_t = f1, t
     return best_t, best_f1
 
+# Base NN Model Training
 keras.backend.clear_session()
 base_model = build_mlp(X_train_nn.shape[1], units=(100,), activation='relu', dropout_rate=0.0)
 base_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
@@ -549,6 +571,7 @@ for i, cfg in enumerate(search_space, start=1):
 
     model.compile(optimizer=opt, loss="categorical_crossentropy", metrics=["accuracy"])
 
+    # Train model
     model.fit(
         X_train_nn, y_train_oh,
         validation_data=(X_val_nn, y_val_oh),
@@ -557,10 +580,11 @@ for i, cfg in enumerate(search_space, start=1):
         verbose=0,
         callbacks=[early_stop]
     )
-
-    # validation . tune threshold for best F1 
+    # Predict validation probabilities
     val_probs = model.predict(X_val_nn, verbose=0)
     p_yes = val_probs[:, 1]
+
+    # validation . tune threshold for best F1 
     t_best, f1_best = best_threshold_for_f1(y_val_nn, p_yes)
 
     # also report the default argmax metrics 
@@ -577,9 +601,10 @@ for i, cfg in enumerate(search_space, start=1):
 print("\nBEST CONFIG (by validation F1 with tuned threshold):")
 print(best["cfg"])
 print(f"Best validation F1: {best['val_f1']:.4f} at threshold={best['threshold']:.2f}")
-
+# NN Final Predictions using Best Threshold
 best_model = best["model"]
 test_probs_final = best_model.predict(X_test_scaled, verbose=0)[:, 1]
+# Store standard argmax prediction (0.5 threshold)
 results['Neural Network (Architect)'] = (test_probs_final >= 0.5).astype(int)
 
 #  Final test evaluation using tuned threshold 
@@ -587,6 +612,7 @@ best_model = best["model"]
 test_probs = best_model.predict(X_test_scaled, verbose=0)
 p_yes_test = test_probs[:, 1]
 test_pred = (p_yes_test >= best["threshold"]).astype(int)
+# Store tuned threshold prediction
 results["Neural Network (tuned threshold)"] = test_pred
 
 test_acc  = accuracy_score(y_test, test_pred)
@@ -615,7 +641,8 @@ for name, y_pred in results.items():
     prec = precision_score(y_test, y_pred, pos_label=1, zero_division=0) 
     rec = recall_score(y_test, y_pred, pos_label=1, zero_division=0)     
     f1 = f1_score(y_test, y_pred, pos_label=1, zero_division=0)    
-          
+
+    # Exclude KMeans for F1 comparison as it's unsupervised
     if 'KMeans' not in name:
         final_f1_scores.append(f1)
         final_model_names.append(name)
@@ -625,15 +652,6 @@ for name, y_pred in results.items():
     # Plot Confusion Matrix
     plot_confusion_matrix(y_test, y_pred, title=f"Confusion Matrix: {name}")
 
-
-plt.figure(figsize=(12, 6))
-sns.barplot(x=final_f1_scores, y=final_model_names, hue=final_model_names, palette='magma', legend=False)
-plt.title('Final Model Performance Comparison (F1-Score)')
-plt.xlabel('F1 Score')
-plt.xlim(0, 1.0)
-plt.grid(axis='x', linestyle='--', alpha=0.7)
-plt.tight_layout()
-plt.show()
 
 
 
