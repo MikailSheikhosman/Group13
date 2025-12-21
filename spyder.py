@@ -5,7 +5,9 @@ Created on Sat Nov  1 22:38:42 2025
 
 @author: apps
 """
-
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,9 +25,6 @@ from imblearn.over_sampling import SMOTE
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, silhouette_score
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers, regularizers
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score, confusion_matrix
 import gc
@@ -82,6 +81,46 @@ if 'duration' in df.columns:
 
 y_for_interpret = df["y"]
 X_for_clustering = df.drop(columns=["y"])
+
+
+# Calculate probabilities of classes
+counts = df['y'].value_counts(normalize=True)
+prob_no = counts['no']
+prob_yes = counts['yes']
+
+#  Majority Class (Always predict 'no')
+baseline_majority = prob_no
+
+#  Random Classifier (p(yes)^2 + p(no)^2)
+baseline_random = (prob_yes ** 2) + (prob_no ** 2)
+
+print(f"Class Distribution: No= {prob_no:.4f}, Yes= {prob_yes:.4f}")
+print(f"Majority Class:   {baseline_majority*100:.2f}%")
+print(f"Random Classifier: {baseline_random*100:.2f}% ")
+
+
+
+
+
+
+X_raw = df.drop('y', axis=1)
+y_raw = df['y']
+
+
+le = LabelEncoder()
+y = le.fit_transform(y_raw)
+
+X_encoded = pd.get_dummies(X_raw, drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_encoded, y, test_size=0.3, stratify=y, random_state=42)
+
+
+
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
 
 #KMEANS PCA
@@ -222,44 +261,7 @@ print(stability_df.to_string(index=False))
 
 
 
-# Calculate probabilities of classes
-counts = df['y'].value_counts(normalize=True)
-prob_no = counts['no']
-prob_yes = counts['yes']
 
-#  Majority Class (Always predict 'no')
-baseline_majority = prob_no
-
-#  Random Classifier (p(yes)^2 + p(no)^2)
-baseline_random = (prob_yes ** 2) + (prob_no ** 2)
-
-print(f"Class Distribution: No= {prob_no:.4f}, Yes= {prob_yes:.4f}")
-print(f"Majority Class:   {baseline_majority*100:.2f}%")
-print(f"Random Classifier: {baseline_random*100:.2f}% ")
-
-
-
-
-
-
-X_raw = df.drop('y', axis=1)
-y_raw = df['y']
-
-
-le = LabelEncoder()
-y = le.fit_transform(y_raw)
-
-X_encoded = pd.get_dummies(X_raw, drop_first=True)
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X_encoded, y, test_size=0.3, stratify=y, random_state=42)
-
-
-
-
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
 
 
 
@@ -279,56 +281,21 @@ plt.show()
 
 results = {}
 
-# Silhouette Scores to find optimal k
-silhouette_scores = []
-k_range = range(2, 11)
 
-for k in k_range:
-    kmeans_temp = KMeans(n_clusters=k, random_state=42, n_init=10)
-    cluster_labels = kmeans_temp.fit_predict(X_train_scaled)
-    score = silhouette_score(X_train_scaled, cluster_labels)
-    silhouette_scores.append(score)
-
-# Plot Silhouette Scores
-plt.figure(figsize=(8, 5))
-plt.plot(k_range, silhouette_scores, marker='o', linestyle='-', color='green')
-plt.title('Silhouette Scores for Optimal k')
-plt.xlabel('Number of Clusters')
-plt.ylabel('Silhouette Score (Higher is Better)')
-plt.grid(True)
-plt.show()
-
-best_index = np.argmax(silhouette_scores)
-optimal_k = k_range[best_index]
-
-print(f"Optimal k based on Silhouette Score: {optimal_k}")
-
-kmeans_final = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
-kmeans_final.fit(X_train_scaled)
-
-train_cluster_ids = kmeans_final.predict(X_train_scaled)
-cluster_map = {}
-
-for cluster_id in range(optimal_k):
-    indices = np.where(train_cluster_ids == cluster_id)
-    true_labels_in_cluster = y_train[indices]
-    
-    if len(true_labels_in_cluster) > 0:
-        mode_label = np.bincount(true_labels_in_cluster).argmax()
-    else:
-        mode_label = 0
-    
-    cluster_map[cluster_id] = mode_label
-
-test_cluster_ids = kmeans_final.predict(X_test_scaled)
-y_pred_kmeans = np.array([cluster_map[cid] for cid in test_cluster_ids])
-results[f'KMeans (k={optimal_k})'] = y_pred_kmeans
 
 # Decision Tree 
 dt = DecisionTreeClassifier(random_state=42, class_weight='balanced', max_depth=7)
 dt.fit(X_train, y_train)
 y_pred_dt = dt.predict(X_test)
 results['Decision Tree'] = y_pred_dt
+plot_complexity_curve(
+    DecisionTreeClassifier(class_weight='balanced', random_state=42),
+    "Decision Tree Complexity Curve (Overfitting Check)",
+    X_train, y_train,
+    param_name="max_depth",
+    param_range=range(1, 16),
+    scoring="f1"
+)
 
 # Decision Tree Feature Importance Plot
 importances_dt = dt.feature_importances_
@@ -339,6 +306,7 @@ plt.bar(range(10), importances_dt[indices_dt], align="center", color='salmon')
 plt.xticks(range(10), X_encoded.columns[indices_dt], rotation=45)
 plt.tight_layout()
 plt.show()
+
 
 
 
@@ -604,13 +572,6 @@ test_rec  = recall_score(y_test, test_pred, pos_label=1, zero_division=0)
 test_f1   = f1_score(y_test, test_pred, pos_label=1, zero_division=0)
 cm        = confusion_matrix(y_test, test_pred)
 
-print("\nKeras NN Test Metrics (best run, tuned threshold):")
-print(f"Accuracy:  {test_acc:.4f}")
-print(f"Precision: {test_prec:.4f}")
-print(f"Recall:    {test_rec:.4f}")
-print(f"F1:        {test_f1:.4f}")
-print("\nConfusion Matrix (rows=true, cols=pred):")
-print(cm)
 
 
 
@@ -641,8 +602,8 @@ for name, y_pred in results.items():
 
 
 plt.figure(figsize=(12, 6))
-sns.barplot(x=final_f1_scores, y=final_model_names, palette='magma')
-plt.title('Model Performance Comparison (F1-Score)')
+sns.barplot(x=final_f1_scores, y=final_model_names, hue=final_model_names, palette='magma', legend=False)
+plt.title('Final Model Performance Comparison (F1-Score)')
 plt.xlabel('F1 Score')
 plt.xlim(0, 1.0)
 plt.grid(axis='x', linestyle='--', alpha=0.7)
