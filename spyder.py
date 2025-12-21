@@ -331,9 +331,14 @@ plt.figure(figsize=(10, 5))
 plt.title("Top 10 Feature Importances (Random Forest)")
 plt.bar(range(10), importances[indices], align="center", color='skyblue')
 plt.xticks(range(10), X_encoded.columns[indices], rotation=45)
+
+#x/y labels
+plt.xlabel("Feature Name")
+plt.ylabel("Importance Score (Gini)")
+
+
 plt.tight_layout()
 plt.show()
-
 
 # lean forest (top 10 features)
 top_features = X_encoded.columns[indices]
@@ -408,7 +413,7 @@ svm_base.fit(X_train_scaled, y_train)
 results['SVM (Base)'] = svm_base.predict(X_test_scaled)
 #optimisation
 param_grid = {
-    'C': [0.1, 1, 3, 5, 8, 10], 
+    'C': [0.1, 0.5, 1, 3, 5, 8, 10], 
     'gamma': ['scale', 'auto'], 
     'kernel': ['rbf', 'poly']
 }
