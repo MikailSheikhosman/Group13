@@ -31,6 +31,10 @@ import gc
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
+# Function to draw the "Confusion Matrix" heatmap.
+# This visually shows:
+# - True Positives: Correctly predicted "Yes" (Good for business)
+# - False Negatives: Missed customers (Bad for business)
 def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
     
     cm = confusion_matrix(y_true, y_pred)
@@ -41,6 +45,8 @@ def plot_confusion_matrix(y_true, y_pred, title="Confusion Matrix"):
     plt.title(title)
     plt.show()
 
+# Function to draw the "Complexity Curve".
+# This graph shows if a model is "learning" or "memorizing".
 def plot_complexity_curve(estimator, title, X, y, param_name, param_range, cv=3, scoring="f1"):
     train_scores, test_scores = validation_curve(
         estimator, X, y, param_name=param_name, param_range=param_range,
@@ -82,18 +88,15 @@ if 'duration' in df.columns:
 y_for_interpret = df["y"]
 X_for_clustering = df.drop(columns=["y"])
 
-
+#Benchmarks
 # Calculate probabilities of classes
 counts = df['y'].value_counts(normalize=True)
 prob_no = counts['no']
 prob_yes = counts['yes']
-
 #  Majority Class (Always predict 'no')
 baseline_majority = prob_no
-
 #  Random Classifier (p(yes)^2 + p(no)^2)
 baseline_random = (prob_yes ** 2) + (prob_no ** 2)
-
 print(f"Class Distribution: No= {prob_no:.4f}, Yes= {prob_yes:.4f}")
 print(f"Majority Class:   {baseline_majority*100:.2f}%")
 print(f"Random Classifier: {baseline_random*100:.2f}% ")
@@ -268,6 +271,7 @@ print(stability_df.to_string(index=False))
 
 
 # PCA
+# Create the 2D Scatter Plot of customers
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_train_scaled)
 
@@ -331,7 +335,7 @@ plt.tight_layout()
 plt.show()
 
 
-# lean forest
+# lean forest (top 10 features)
 top_features = X_encoded.columns[indices]
 print(f"     Selected Features: {list(top_features)}")
 
@@ -342,7 +346,7 @@ rf_lean.fit(X_train_lean, y_train)
 results['RF (Top 10 Features)'] = rf_lean.predict(X_test_lean)
 
 
-#tuned forest
+#tuned forest best parameters
 rf_params = {
     'n_estimators': [50, 100, 150, 200, 250, 300], 
     'max_depth': [5, 10, 15, 20, 25],
@@ -410,7 +414,6 @@ param_grid = {
 }
 
 
-# n_jobs=1 prevents the ChildProcessError
 grid = GridSearchCV(SVC(class_weight='balanced', random_state=42), 
                     param_grid, refit=True, verbose=0, cv=3, n_jobs=1)
 
