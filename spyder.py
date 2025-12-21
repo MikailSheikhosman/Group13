@@ -399,6 +399,9 @@ results['k-NN'] = y_pred_knn
 
 
 # SVM
+svm_base = SVC(class_weight='balanced', random_state=42) 
+svm_base.fit(X_train_scaled, y_train)
+results['SVM (Base)'] = svm_base.predict(X_test_scaled)
 #optimisation
 param_grid = {
     'C': [0.1, 1, 3, 5, 8, 10], 
@@ -484,6 +487,14 @@ def best_threshold_for_f1(y_true, p_yes):
             best_f1, best_t = f1, t
     return best_t, best_f1
 
+keras.backend.clear_session()
+base_model = build_mlp(X_train_nn.shape[1], units=(100,), activation='relu', dropout_rate=0.0)
+base_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+base_model.fit(X_train_nn, y_train_oh, epochs=50, batch_size=128, verbose=0)
+test_probs_base = base_model.predict(X_test_scaled, verbose=0)[:, 1]
+results['Neural Network (Base)'] = (test_probs_base >= 0.5).astype(int)
+
+
 # 3) Small search space 
 search_space = [
     # Architecture/regularisation knobs (dropout/L2) + optimiser knobs (Adam/SGD+momentum)
@@ -559,6 +570,10 @@ print("\nBEST CONFIG (by validation F1 with tuned threshold):")
 print(best["cfg"])
 print(f"Best validation F1: {best['val_f1']:.4f} at threshold={best['threshold']:.2f}")
 
+best_model = best["model"]
+test_probs_final = best_model.predict(X_test_scaled, verbose=0)[:, 1]
+results['Neural Network (Architect)'] = (test_probs_final >= 0.5).astype(int)
+
 #  Final test evaluation using tuned threshold 
 best_model = best["model"]
 test_probs = best_model.predict(X_test_scaled, verbose=0)
@@ -571,6 +586,8 @@ test_prec = precision_score(y_test, test_pred, pos_label=1, zero_division=0)
 test_rec  = recall_score(y_test, test_pred, pos_label=1, zero_division=0)
 test_f1   = f1_score(y_test, test_pred, pos_label=1, zero_division=0)
 cm        = confusion_matrix(y_test, test_pred)
+
+
 
 
 
